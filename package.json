@@ -1,0 +1,27 @@
+{
+  "name": "opencode-child-session-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tui": "./src/tui.tsx"
+  },
+  "scripts": {
+    "test": "bun --conditions=browser test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "2.1.2",
+    "@opentui/core": "0.6.6",
+    "@opentui/solid": "0.6.6",
+    "@types/bun": "latest",
+    "solid-js": "1.9.15",
+    "typescript": "~5.9.3"
+  },
+  "peerDependencies": {
+    "@opencode/plugin": ">=2.1.2",
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
+  }
+}
