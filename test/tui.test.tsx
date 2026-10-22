@@ -57,7 +57,7 @@ test("renders the editor on the native child slot, not on a root session", async
     expect(child.captureCharFrame()).toContain("Chat with this subagent")
     expect(child.captureCharFrame()).toContain("Agent: default (unselected)")
     expect(child.captureCharFrame()).toContain("Change (Shift+Tab, idle only)")
-    expect(layers.find((layer) => layer.mode === "child-session-chat")).toMatchObject({
+    expect(layers.find((layer) => layer.mode === "opencode-subagent-chat")).toMatchObject({
       priority: 10,
       commands: [
         { bind: "escape", title: "Return to subagent picker" },
@@ -65,9 +65,9 @@ test("renders the editor on the native child slot, not on a root session", async
         { bind: "ctrl+p", title: "Open command palette" },
       ],
     })
-    layers.find((layer) => layer.mode === "child-session-chat")?.commands?.find((command) => command.bind === "ctrl+p")?.run()
+    layers.find((layer) => layer.mode === "opencode-subagent-chat")?.commands?.find((command) => command.bind === "ctrl+p")?.run()
     expect(dispatched).toBe("command.palette.show")
-    const palette = layers.find((layer) => layer.mode === "global")?.commands?.find((command) => command.id === "child-session-chat.agent")
+    const palette = layers.find((layer) => layer.mode === "global")?.commands?.find((command) => command.id === "opencode-subagent-chat.agent")
     expect(palette?.enabled).toBeInstanceOf(Function)
     expect((palette?.enabled as () => boolean)()).toBe(true)
     await palette?.run()
@@ -78,11 +78,11 @@ test("renders the editor on the native child slot, not on a root session", async
 
     // A late or reopened picker must not split editor focus from keyboard mode.
     layers.find((layer) => layer.mode === "composer")?.commands?.[0]?.run()
-    expect(mode.current()).toBe("child-session-chat")
+    expect(mode.current()).toBe("opencode-subagent-chat")
     const closePicker = mode.push("composer")
     await child.renderOnce()
-    expect(mode.current()).toBe("child-session-chat")
-    expect(modes().filter((item) => item.mode === "child-session-chat")).toHaveLength(1)
+    expect(mode.current()).toBe("opencode-subagent-chat")
+    expect(modes().filter((item) => item.mode === "opencode-subagent-chat")).toHaveLength(1)
 
     // Dialogs and forms keep input; returning to the picker restores chat.
     const closeModal = mode.push("modal")
@@ -94,10 +94,10 @@ test("renders the editor on the native child slot, not on a root session", async
     closeForm()
     closeModal()
     await child.renderOnce()
-    expect(mode.current()).toBe("child-session-chat")
+    expect(mode.current()).toBe("opencode-subagent-chat")
 
     // Esc is an intentional handoff, not a mode loss to recover automatically.
-    layers.find((layer) => layer.mode === "child-session-chat")?.commands?.[0]?.run()
+    layers.find((layer) => layer.mode === "opencode-subagent-chat")?.commands?.[0]?.run()
     await child.renderOnce()
     expect(mode.current()).toBe("composer")
     closePicker()

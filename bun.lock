@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-child-session-chat",
+      "name": "opencode-subagent-chat",
       "devDependencies": {
         "@opencode/plugin": "2.1.2",
         "@opentui/core": "0.6.6",

@@ -1,5 +1,5 @@
 {
-  "name": "opencode-child-session-chat",
+  "name": "opencode-subagent-chat",
   "version": "0.1.0",
   "private": true,
   "type": "module",

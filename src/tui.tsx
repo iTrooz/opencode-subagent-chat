@@ -8,7 +8,7 @@ import { createSubmit } from "./submit"
 
 // Keep the native transcript and picker; render input only for the displayed child.
 export default Plugin.define({
-  id: "child-session-chat",
+  id: "opencode-subagent-chat",
   setup(context) {
     return context.ui.slot({
       append: "session.composer.top",
@@ -73,9 +73,9 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
   // Reopening the native picker can place its mode above an existing chat mode.
   function activate() {
     if (!editor || editor.isDestroyed) return
-    if (!leaveMode || props.context.keymap.mode.current() !== "child-session-chat") {
+    if (!leaveMode || props.context.keymap.mode.current() !== "opencode-subagent-chat") {
       leaveMode?.()
-      leaveMode = props.context.keymap.mode.push("child-session-chat")
+      leaveMode = props.context.keymap.mode.push("opencode-subagent-chat")
     }
     setChatActive(true)
     editor.focus()
@@ -100,7 +100,7 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
     commands: [{ bind: "ctrl+g", title: "Focus subagent chat", run: activate }],
   }))
   props.context.keymap.layer(() => ({
-    mode: "child-session-chat",
+    mode: "opencode-subagent-chat",
     priority: 10,
     commands: [
       { bind: "escape", title: "Return to subagent picker", run: backToPicker },
@@ -111,7 +111,7 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
   props.context.keymap.layer(() => ({
     mode: "global",
     commands: [{
-      id: "child-session-chat.agent",
+      id: "opencode-subagent-chat.agent",
       title: "Change this subagent's agent",
       group: "Subagent",
       palette: true,
