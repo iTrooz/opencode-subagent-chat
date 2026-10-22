@@ -21,6 +21,8 @@ If `plugins` already exists, append the path instead of replacing the array. CLI
 
 From a parent session, open its subagent picker (`Ctrl+X`, then Down), select an existing child, and type in the editor above the picker. **Enter** sends to the displayed child; **Esc** returns keyboard control to the picker; **Ctrl+G** focuses the chat again. Click the editor to focus it. Parent navigation remains the picker's own navigation. The root session has no chat editor.
 
+The **Agent** row shows the child's selected agent (or `default (unselected)` when no agent is stored). Click **Change** or press **Shift+Tab** while chatting to choose Build, Plan, or the child's original agent. If your terminal does not pass Shift+Tab to OpenCode, use **Ctrl+P → Change this subagent's agent**, or click the Agent row. Outside the child-chat editor, Shift+Tab keeps its normal OpenCode behavior; Ctrl+Tab still switches session tabs. Switching is available only while the child is idle. This changes the child's instructions and permissions for subsequent work; it keeps the same session, transcript, and model. Selecting an agent does not itself send a prompt.
+
 Submission uses `session.prompt({ sessionID: childID, text, delivery: "steer" })` and does not change the child's agent or model. Running children accept input at a safe execution boundary, without interruption. Responses use the native child transcript. A response to a direct follow-up is **not automatically reported to the parent** by a new delegation job.
 
 Errors keep the draft. If a connection fails after server admission, the status can be ambiguous; inspect the child transcript before retrying to avoid a duplicate. Child permission requests remain handled by the parent session's UI.

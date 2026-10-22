@@ -2,7 +2,8 @@
 import { Plugin } from "@opencode/plugin/tui"
 import type { Context } from "@opencode/plugin/tui/context"
 import type { TextareaRenderable } from "@opentui/core"
-import { createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
+import { createAgentSwitch } from "./agent"
 import { createSubmit } from "./submit"
 
 // Keep the native transcript and picker; render input only for the displayed child.
@@ -27,6 +28,11 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
   const [status, setStatus] = createSignal("")
   const [failed, setFailed] = createSignal(false)
   const [draft, setDraft] = createSignal("")
+  const [chatActive, setChatActive] = createSignal(false)
+  const [selectedAgent, setSelectedAgent] = createSignal<string>()
+  const [original] = props.context.storage.memory(`original-agent.${props.sessionID}`, {
+    initial: { id: props.context.data.session.get(props.sessionID)?.agent ?? "" },
+  })
   const feedback = (message: string, error?: boolean) => {
     setFailed(!!error)
     setStatus(message)
@@ -42,18 +48,52 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
     },
     status: feedback,
   })
+  const switchAgent = createAgentSwitch({
+    client: props.context.client,
+    sessionID: props.sessionID,
+    session: () => {
+      const session = props.context.data.session.get(props.sessionID)
+      return session ? { ...session, agent: selectedAgent() ?? session.agent } : undefined
+    },
+    status: () => props.context.data.session.status(props.sessionID),
+    sending: () => submit.busy,
+    original: original.id,
+    select: (options) => props.context.ui.dialog.select(options),
+    feedback,
+    onSelected: setSelectedAgent,
+  })
 
+  // Prefer the confirmed selection until session events refresh the shared cache.
+  createEffect(() => {
+    if (selectedAgent() && props.context.data.session.get(props.sessionID)?.agent === selectedAgent()) {
+      setSelectedAgent(undefined)
+    }
+  })
+
+  // Reopening the native picker can place its mode above an existing chat mode.
   function activate() {
     if (!editor || editor.isDestroyed) return
-    if (!leaveMode) leaveMode = props.context.keymap.mode.push("child-session-chat")
+    if (!leaveMode || props.context.keymap.mode.current() !== "child-session-chat") {
+      leaveMode?.()
+      leaveMode = props.context.keymap.mode.push("child-session-chat")
+    }
+    setChatActive(true)
     editor.focus()
   }
 
+  // Yield deliberately until the user focuses chat again.
   function backToPicker() {
+    setChatActive(false)
     editor?.blur()
     leaveMode?.()
     leaveMode = undefined
   }
+
+  // Reclaim only picker input; modal and form modes must retain their priority.
+  createEffect(() => {
+    if (!chatActive() || props.context.keymap.mode.current() !== "composer") return
+    untrack(activate)
+  })
 
   props.context.keymap.layer(() => ({
     mode: "composer",
@@ -61,7 +101,26 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
   }))
   props.context.keymap.layer(() => ({
     mode: "child-session-chat",
-    commands: [{ bind: "escape", title: "Return to subagent picker", run: backToPicker }],
+    priority: 10,
+    commands: [
+      { bind: "escape", title: "Return to subagent picker", run: backToPicker },
+      { bind: "shift+tab", title: "Switch subagent agent", run: switchAgent },
+      { bind: "ctrl+p", title: "Open command palette", run: () => props.context.keymap.dispatch("command.palette.show") },
+    ],
+  }))
+  props.context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{
+      id: "child-session-chat.agent",
+      title: "Change this subagent's agent",
+      group: "Subagent",
+      palette: true,
+      enabled: () => {
+        const route = props.context.ui.router.current()
+        return route.type === "session" && route.sessionID === props.sessionID
+      },
+      run: switchAgent,
+    }],
   }))
 
   // Wait until the host picker has installed its composer mode before focusing chat.
@@ -76,6 +135,21 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
       <text fg={props.context.theme.text.muted}>
         Chat with this subagent · Enter send · Esc picker · Ctrl+G return to chat
       </text>
+      <box
+        onMouseUp={(event) => {
+          if (event.button === 0) void switchAgent()
+        }}
+      >
+        <text
+          {...{
+            fg: props.context.theme.text.muted,
+            get children() {
+              const agent = selectedAgent() ?? props.context.data.session.get(props.sessionID)?.agent ?? "default (unselected)"
+              return `Agent: ${agent} · Change (Shift+Tab, idle only)`
+            },
+          }}
+        />
+      </box>
       <textarea
         ref={(value: TextareaRenderable) => (editor = value)}
         minHeight={1}

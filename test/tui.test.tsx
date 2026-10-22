@@ -2,7 +2,8 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { Host } from "@opencode/plugin/host"
-import type { Context, SlotClaim } from "@opencode/plugin/tui/context"
+import { createSignal } from "solid-js"
+import type { Context, KeymapLayer, SlotClaim } from "@opencode/plugin/tui/context"
 import plugin from "../src/tui"
 
 // OpenCode resolves local directories from their root, not package exports.
@@ -13,12 +14,37 @@ test("the local plugin directory exposes its TUI entrypoint", () => {
 // Mount the actual slot contribution against child and root session metadata.
 test("renders the editor on the native child slot, not on a root session", async () => {
   let slot: SlotClaim | undefined
+  let switched: string | undefined
+  let dispatched: string | undefined
+  const layers: KeymapLayer[] = []
+  const [modes, setModes] = createSignal<{ id: symbol; mode: string }[]>([])
+  // Model the host's reactive, last-pushed-wins input-mode stack.
+  const mode = {
+    current: () => modes().at(-1)?.mode ?? "base",
+    push: (name: string) => {
+      const id = Symbol(name)
+      setModes((items) => [...items, { id, mode: name }])
+      return () => setModes((items) => items.filter((item) => item.id !== id))
+    },
+  }
   const context = {
-    data: { session: { get: (id: string) => (id === "child" ? { parentID: "parent" } : {}) } },
-    keymap: { layer: () => {}, mode: { push: () => () => {} } },
-    client: { session: { prompt: async () => {} } },
+    data: { session: { get: (id: string) => (id === "child" ? { parentID: "parent", location: { directory: "/example" } } : {}), status: () => "idle" } },
+    storage: { memory: (_: string, options: { initial: { id: string } }) => [options.initial, () => {}] },
+    keymap: { layer: (factory: () => KeymapLayer) => layers.push(factory()), mode, dispatch: (id: string) => { dispatched = id } },
+    client: {
+      session: { prompt: async () => {}, switchAgent: async (input: { agent: string }) => { switched = input.agent } },
+      agent: { list: async () => ({ data: [
+        { id: "build", mode: "primary" },
+        { id: "plan", mode: "primary" },
+        { id: "general", mode: "subagent" },
+      ] }) },
+    },
     theme: { text: { base: "#ffffff", muted: "#888888", feedback: { error: { base: "#ff0000" }, info: { base: "#00ff00" } } } },
-    ui: { slot: (claim: SlotClaim) => { slot = claim; return () => {} } },
+    ui: {
+      slot: (claim: SlotClaim) => { slot = claim; return () => {} },
+      dialog: { select: async () => "plan" },
+      router: { current: () => ({ type: "session", sessionID: "child" }) },
+    },
   } as unknown as Context
   plugin.setup(context)
   expect(slot).toBeDefined()
@@ -29,6 +55,53 @@ test("renders the editor on the native child slot, not on a root session", async
   try {
     await child.renderOnce()
     expect(child.captureCharFrame()).toContain("Chat with this subagent")
+    expect(child.captureCharFrame()).toContain("Agent: default (unselected)")
+    expect(child.captureCharFrame()).toContain("Change (Shift+Tab, idle only)")
+    expect(layers.find((layer) => layer.mode === "child-session-chat")).toMatchObject({
+      priority: 10,
+      commands: [
+        { bind: "escape", title: "Return to subagent picker" },
+        { bind: "shift+tab", title: "Switch subagent agent" },
+        { bind: "ctrl+p", title: "Open command palette" },
+      ],
+    })
+    layers.find((layer) => layer.mode === "child-session-chat")?.commands?.find((command) => command.bind === "ctrl+p")?.run()
+    expect(dispatched).toBe("command.palette.show")
+    const palette = layers.find((layer) => layer.mode === "global")?.commands?.find((command) => command.id === "child-session-chat.agent")
+    expect(palette?.enabled).toBeInstanceOf(Function)
+    expect((palette?.enabled as () => boolean)()).toBe(true)
+    await palette?.run()
+    await child.renderOnce()
+    expect(switched).toBe("plan")
+    expect(child.captureCharFrame()).toContain("Agent: plan")
+    expect(child.captureCharFrame()).toContain("Subagent agent set to plan")
+
+    // A late or reopened picker must not split editor focus from keyboard mode.
+    layers.find((layer) => layer.mode === "composer")?.commands?.[0]?.run()
+    expect(mode.current()).toBe("child-session-chat")
+    const closePicker = mode.push("composer")
+    await child.renderOnce()
+    expect(mode.current()).toBe("child-session-chat")
+    expect(modes().filter((item) => item.mode === "child-session-chat")).toHaveLength(1)
+
+    // Dialogs and forms keep input; returning to the picker restores chat.
+    const closeModal = mode.push("modal")
+    await child.renderOnce()
+    expect(mode.current()).toBe("modal")
+    const closeForm = mode.push("form")
+    await child.renderOnce()
+    expect(mode.current()).toBe("form")
+    closeForm()
+    closeModal()
+    await child.renderOnce()
+    expect(mode.current()).toBe("child-session-chat")
+
+    // Esc is an intentional handoff, not a mode loss to recover automatically.
+    layers.find((layer) => layer.mode === "child-session-chat")?.commands?.[0]?.run()
+    await child.renderOnce()
+    expect(mode.current()).toBe("composer")
+    closePicker()
+    expect(mode.current()).toBe("base")
   } finally {
     child.renderer.destroy()
   }
