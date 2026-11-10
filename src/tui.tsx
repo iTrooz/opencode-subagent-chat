@@ -4,17 +4,19 @@ import type { Context } from "@opencode/plugin/tui/context"
 import type { TextareaRenderable } from "@opentui/core"
 import { createEffect, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createAgentSwitch } from "./agent"
+import { formatKey, resolveOptions } from "./options"
 import { createSubmit } from "./submit"
 
 // Keep the native transcript and picker; render input only for the displayed child.
 export default Plugin.define({
   id: "opencode-subagent-chat",
   setup(context) {
+    const options = resolveOptions(context.options)
     return context.ui.slot({
       append: "session.composer.top",
       render: ({ sessionID }) => (
         <Show {...{ get when() { return context.data.session.get(sessionID)?.parentID } }}>
-          <ChildChat context={context} sessionID={sessionID} />
+          <ChildChat context={context} sessionID={sessionID} switchAgentKey={options.switchAgentKey} />
         </Show>
       ),
     })
@@ -22,7 +24,7 @@ export default Plugin.define({
 })
 
 // A dedicated input mode prevents the picker's arrows and Enter from taking over the editor.
-export function ChildChat(props: { context: Context; sessionID: string }) {
+export function ChildChat(props: { context: Context; sessionID: string; switchAgentKey: string | undefined }) {
   let editor: TextareaRenderable | undefined
   let leaveMode: (() => void) | undefined
   const [status, setStatus] = createSignal("")
@@ -104,7 +106,9 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
     priority: 10,
     commands: [
       { bind: "escape", title: "Return to subagent picker", run: backToPicker },
-      { bind: "shift+tab", title: "Switch subagent agent", run: switchAgent },
+      ...(props.switchAgentKey
+        ? [{ bind: props.switchAgentKey, title: "Switch subagent agent", run: switchAgent }]
+        : []),
       { bind: "ctrl+p", title: "Open command palette", run: () => props.context.keymap.dispatch("command.palette.show") },
     ],
   }))
@@ -145,7 +149,7 @@ export function ChildChat(props: { context: Context; sessionID: string }) {
             fg: props.context.theme.text.muted,
             get children() {
               const agent = selectedAgent() ?? props.context.data.session.get(props.sessionID)?.agent ?? "default (unselected)"
-              return `Agent: ${agent} · Change (Shift+Tab, idle only)`
+              return `Agent: ${agent} · ${props.switchAgentKey ? `Change (${formatKey(props.switchAgentKey)}, idle only)` : "Change (idle only)"}`
             },
           }}
         />

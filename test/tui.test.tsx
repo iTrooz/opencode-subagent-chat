@@ -28,6 +28,7 @@ test("renders the editor on the native child slot, not on a root session", async
     },
   }
   const context = {
+    options: {},
     data: { session: { get: (id: string) => (id === "child" ? { parentID: "parent", location: { directory: "/example" } } : {}), status: () => "idle" } },
     storage: { memory: (_: string, options: { initial: { id: string } }) => [options.initial, () => {}] },
     keymap: { layer: (factory: () => KeymapLayer) => layers.push(factory()), mode, dispatch: (id: string) => { dispatched = id } },
@@ -112,5 +113,60 @@ test("renders the editor on the native child slot, not on a root session", async
     expect(root.captureCharFrame()).not.toContain("Chat with this subagent")
   } finally {
     root.renderer.destroy()
+  }
+})
+
+function mount(options: Record<string, unknown>) {
+  let slot: SlotClaim | undefined
+  const layers: KeymapLayer[] = []
+  const context = {
+    options,
+    data: { session: { get: (id: string) => (id === "child" ? { parentID: "parent", agent: "build", location: { directory: "/example" } } : {}), status: () => "idle" } },
+    storage: { memory: (_: string, options: { initial: { id: string } }) => [options.initial, () => {}] },
+    keymap: { layer: (factory: () => KeymapLayer) => layers.push(factory()), mode: { current: () => "composer", push: () => () => {} }, dispatch: () => {} },
+    client: { session: { prompt: async () => {}, switchAgent: async () => {} }, agent: { list: async () => ({ data: [] }) } },
+    theme: { text: { base: "#ffffff", muted: "#888888", feedback: { error: { base: "#ff0000" }, info: { base: "#00ff00" } } } },
+    ui: {
+      slot: (claim: SlotClaim) => { slot = claim; return () => {} },
+      dialog: { select: async () => undefined },
+      router: { current: () => ({ type: "session", sessionID: "child" }) },
+    },
+  } as unknown as Context
+  plugin.setup(context)
+  if (!slot) throw new Error("Slot was not registered")
+  return { slot, layers }
+}
+
+test("switchAgentKey changes the shortcut and its hint", async () => {
+  const { slot, layers } = mount({ switchAgentKey: "alt+tab" })
+  const render = slot.render as (input: { sessionID: string }) => ReturnType<SlotClaim["render"]>
+  const child = await testRender(() => render({ sessionID: "child" }), { width: 80, height: 12 })
+  try {
+    await child.renderOnce()
+    expect(child.captureCharFrame()).toContain("Change (Alt+Tab, idle only)")
+    expect(
+      layers
+        .find((layer) => layer.mode === "opencode-subagent-chat")
+        ?.commands?.find((command) => command.title === "Switch subagent agent")?.bind,
+    ).toBe("alt+tab")
+  } finally {
+    child.renderer.destroy()
+  }
+})
+
+test("switchAgentKey false removes the shortcut", async () => {
+  const { slot, layers } = mount({ switchAgentKey: false })
+  const render = slot.render as (input: { sessionID: string }) => ReturnType<SlotClaim["render"]>
+  const child = await testRender(() => render({ sessionID: "child" }), { width: 80, height: 12 })
+  try {
+    await child.renderOnce()
+    expect(child.captureCharFrame()).toContain("Change (idle only)")
+    expect(
+      layers
+        .find((layer) => layer.mode === "opencode-subagent-chat")
+        ?.commands?.some((command) => command.title === "Switch subagent agent"),
+    ).toBe(false)
+  } finally {
+    child.renderer.destroy()
   }
 })
